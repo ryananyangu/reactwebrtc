@@ -1,7 +1,6 @@
 import styles from "./Streamer.module.css";
-// import firebase from "firebase/firebase";
 import firebase from "firebase/app";
-import "firebase/firestore"
+import "firebase/firestore";
 import React, { useRef } from "react";
 
 const Streamer = (props) => {
@@ -12,8 +11,12 @@ const Streamer = (props) => {
   const answerButtonRef = useRef();
   const remoteVideoRef = useRef();
   const hangupButtonRef = useRef();
+  const videoDownloadRef = useRef();
 
   const firestore = firebase.firestore();
+  let videoUrl = null;
+
+  let recordedChunks = [];
 
   const servers = {
     iceServers: [
@@ -31,13 +34,16 @@ const Streamer = (props) => {
   const pc = new RTCPeerConnection(servers);
   let localStream = null;
   let remoteStream = null;
+  var options = { mimeType: "video/webm; codecs=vp9" };
+  let mediaRecorder = null;
 
   const webCamHandler = async () => {
-    console.log(webcamVideoRef);
+    console.log("Starting webcam and mic ..... ");
     localStream = await navigator.mediaDevices.getUserMedia({
       video: true,
       audio: true,
     });
+
     remoteStream = new MediaStream();
 
     // Push tracks from local stream to peer connection
@@ -55,25 +61,30 @@ const Streamer = (props) => {
     webcamVideoRef.current.srcObject = localStream;
     remoteVideoRef.current.srcObject = remoteStream;
 
-    callButtonRef.current.disabled = false;
-    answerButtonRef.current.disabled = false;
-    webcamButtonRef.current.disabled = true;
+    // recording of local video from stream
+    mediaRecorder = new MediaRecorder(localStream, options);
+    mediaRecorder.ondataavailable = (event) => {
+      console.log("data-available");
+      if (event.data.size > 0) {
+        recordedChunks.push(event.data);
+        console.log(recordedChunks);
+      }
+    };
+    mediaRecorder.start();
   };
 
   const callHandler = async () => {
+    console.log("Starting callid generation .... ");
     // Reference Firestore collections for signaling
     const callDoc = firestore.collection("calls").doc();
     const offerCandidates = callDoc.collection("offerCandidates");
     const answerCandidates = callDoc.collection("answerCandidates");
-    console.log("Here 1")
 
     callInputRef.current.value = callDoc.id;
-    
 
     // Get candidates for caller, save to db
     pc.onicecandidate = (event) => {
       event.candidate && offerCandidates.add(event.candidate.toJSON());
-      console.log("Here 2")
     };
 
     // Create offer
@@ -84,7 +95,6 @@ const Streamer = (props) => {
       sdp: offerDescription.sdp,
       type: offerDescription.type,
     };
-    console.log("Here 4")
 
     await callDoc.set({ offer });
 
@@ -94,7 +104,6 @@ const Streamer = (props) => {
       if (!pc.currentRemoteDescription && data?.answer) {
         const answerDescription = new RTCSessionDescription(data.answer);
         pc.setRemoteDescription(answerDescription);
-        console.log("Here 3")
       }
     });
 
@@ -112,6 +121,7 @@ const Streamer = (props) => {
   };
 
   const answerHandler = async () => {
+    console.log("Joining the call ....");
     const callId = callInputRef.current.value;
     const callDoc = firestore.collection("calls").doc(callId);
     const answerCandidates = callDoc.collection("answerCandidates");
@@ -147,7 +157,22 @@ const Streamer = (props) => {
     });
   };
 
-  const hangupHandler = (event) => {};
+  const hangupHandler = () => {
+    console.log("Hanging up the call ...");
+
+    localStream.getTracks().forEach((track) => track.stop());
+    remoteStream.getTracks().forEach((track) => track.stop());
+    mediaRecorder.onstop = (event) => {
+      let blob = new Blob(recordedChunks, {
+        type: "video/webm",
+      });
+          //FIXME: Send data to cloudinary
+      videoDownloadRef.current.href = URL.createObjectURL(blob);
+      videoDownloadRef.current.download =
+        new Date().getTime() + "-locastream.webm";
+    };
+    console.log(videoDownloadRef);
+  };
 
   return (
     <div>
@@ -194,6 +219,9 @@ const Streamer = (props) => {
       <button onClick={hangupHandler} ref={hangupButtonRef}>
         Hangup
       </button>
+      <a ref={videoDownloadRef} href={videoUrl}>
+        Download session video
+      </a>
     </div>
   );
 };

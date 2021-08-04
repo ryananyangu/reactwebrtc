@@ -68,3 +68,12 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 ### `npm run build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+---------------------------------------------------
+
+
+Upgrades.
+- Merging 2 videos into one stream side by side of same length.
+- Merging audios of same length
+- Sending video to cloudinary
+- State management for the button states
